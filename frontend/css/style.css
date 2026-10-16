@@ -697,3 +697,9 @@ body > * { position: relative; z-index: 1; }
 ::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--b3); }
 ::selection { background: rgba(99,102,241,.25); color: var(--t1); }
+
+/* Accessibility: visible keyboard focus */
+:focus-visible {
+  outline: 3px solid #a5b4fc;
+  outline-offset: 3px;
+}
