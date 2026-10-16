@@ -13,18 +13,28 @@ const AppState = {
   employeesList: []
 };
 
+// Auth Storage Key
+const STORAGE_AUTH_KEY = "clockify_authenticated_employee";
+
 // DOM Elements
 const elements = {
   digitalClock:        document.getElementById('digitalClock'),
   dateDisplay:         document.getElementById('dateDisplay'),
+  
+  // Auth Gates & Dashboard Container
+  employeeLoginGate:   document.getElementById('employeeLoginGate'),
+  employeeDashboard:   document.getElementById('employeeDashboard'),
+  employeeLoginForm:   document.getElementById('employeeLoginForm'),
+  loginEmployeeSelect: document.getElementById('loginEmployeeSelect'),
+  loginIdentifier:     document.getElementById('loginIdentifier'),
+  loginPin:            document.getElementById('loginPin'),
+  btnLoginSubmit:      document.getElementById('btnLoginSubmit'),
+  btnEmployeeLogout:   document.getElementById('btnEmployeeLogout'),
+
+  // Employee Profile Elements
   employeeName:        document.getElementById('employeeName'),
   employeeDept:        document.getElementById('employeeDept'),
   employeeAvatar:      document.getElementById('employeeAvatar'),
-  btnSwitchEmployee:   document.getElementById('btnSwitchEmployee'),
-  modalSwitch:         document.getElementById('modalSwitch'),
-  modalClose:          document.getElementById('modalClose'),
-  modalSearchInput:    document.getElementById('modalSearchInput'),
-  employeeSelectList:  document.getElementById('employeeSelectList'),
 
   // Radar / Status — new v3 IDs
   statusBadge:   document.getElementById('statusBadge'),
@@ -65,35 +75,59 @@ async function init() {
                      Math.abs(AppState.workplace.longitude - savedGeo.longitude) > 0.00005 ||
                      parseFloat(AppState.workplace.radius_meters) !== parseFloat(savedGeo.radius_meters);
         if (diff) {
-          // Keep backend synchronized with permanent perimeter
           await ApiClient.updateGeofence(savedGeo);
           AppState.workplace = savedGeo;
         }
       } catch (e) {}
     }
     
-    // 2. Fetch Employees List
+    // 2. Fetch Employees List to populate login selector
     AppState.employeesList = await ApiClient.getEmployees();
-    
-    // 3. Select Initial Employee (Stored or First)
-    const storedId = localStorage.getItem("clockify_active_emp_id");
-    if (storedId) {
-      AppState.currentEmployee = AppState.employeesList.find(e => e.id === parseInt(storedId)) || AppState.employeesList[0];
+    populateEmployeeLoginSelect();
+
+    // 3. Check for Authenticated Employee Session
+    const authRaw = localStorage.getItem(STORAGE_AUTH_KEY);
+    if (authRaw) {
+      try {
+        const savedEmp = JSON.parse(authRaw);
+        // Sync with latest employee data from backend if present
+        AppState.currentEmployee = AppState.employeesList.find(e => e.id === savedEmp.id) || savedEmp;
+        await showPersonalDashboard();
+      } catch (err) {
+        showLoginGate();
+      }
     } else {
-      AppState.currentEmployee = AppState.employeesList[0];
+      showLoginGate();
     }
-
-    renderEmployeeProfile();
-    renderEmployeeModalList();
-    
-    // 4. Fetch Shift Status & History
-    await refreshShiftData();
-
-    // 5. Query Initial Location & Watch Proximity
-    queryLiveLocation();
   } catch (err) {
     showToast(err.message, "error");
   }
+}
+
+// Populate login selector with roster
+function populateEmployeeLoginSelect() {
+  if (!elements.loginEmployeeSelect) return;
+  const opts = AppState.employeesList.map(e => 
+    `<option value="${e.id}" data-staff="${e.staff_id}">${e.name} — ${e.department} (${e.staff_id})</option>`
+  ).join('');
+  elements.loginEmployeeSelect.innerHTML = `<option value="">— Choose your name from roster —</option>` + opts;
+}
+
+// Show Personalized Dashboard for active employee
+async function showPersonalDashboard() {
+  if (elements.employeeLoginGate) elements.employeeLoginGate.style.display = 'none';
+  if (elements.employeeDashboard) elements.employeeDashboard.style.display = 'flex';
+
+  renderEmployeeProfile();
+  await refreshShiftData();
+  queryLiveLocation();
+}
+
+// Show Login Gate when unauthenticated
+function showLoginGate() {
+  if (elements.employeeLoginGate) elements.employeeLoginGate.style.display = 'block';
+  if (elements.employeeDashboard) elements.employeeDashboard.style.display = 'none';
+  AppState.currentEmployee = null;
 }
 
 // Live Digital Clock
@@ -307,82 +341,81 @@ async function handleClockOut() {
   }
 }
 
-// Event Listeners & Modals
+// Event Listeners & Auth Handlers
 function setupEventListeners() {
-  elements.btnSwitchEmployee.addEventListener('click', () => {
-    elements.modalSwitch.classList.add('open');
-    renderEmployeeModalList();
-    if (elements.modalSearchInput) elements.modalSearchInput.value = '';
-    setTimeout(() => elements.modalSearchInput && elements.modalSearchInput.focus(), 100);
-  });
+  // 1. Selector dropdown changes: auto-fill Staff ID
+  if (elements.loginEmployeeSelect) {
+    elements.loginEmployeeSelect.addEventListener('change', (e) => {
+      const selectedId = e.target.value;
+      if (selectedId) {
+        const emp = AppState.employeesList.find(x => x.id === parseInt(selectedId));
+        if (emp && elements.loginIdentifier) {
+          elements.loginIdentifier.value = emp.staff_id;
+        }
+        if (elements.loginPin) elements.loginPin.focus();
+      }
+    });
+  }
 
-  elements.modalClose.addEventListener('click', () => {
-    elements.modalSwitch.classList.remove('open');
-  });
+  // 2. Employee Login Form submission
+  if (elements.employeeLoginForm) {
+    elements.employeeLoginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const identifier = (elements.loginIdentifier?.value || '').trim();
+      const pin = (elements.loginPin?.value || '').trim();
+      const selectVal = elements.loginEmployeeSelect?.value;
 
-  elements.modalSwitch.addEventListener('click', (e) => {
-    if (e.target === elements.modalSwitch) {
-      elements.modalSwitch.classList.remove('open');
-    }
-  });
+      if (!identifier && !selectVal) {
+        showToast('Please select your profile or enter your Staff ID.', 'error');
+        return;
+      }
 
-  // Keyboard close
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') elements.modalSwitch.classList.remove('open');
-  });
+      if (!pin) {
+        showToast('Please enter your 4-digit security PIN.', 'error');
+        return;
+      }
 
-  // Modal search filter
-  if (elements.modalSearchInput) {
-    elements.modalSearchInput.addEventListener('input', (e) => {
-      renderEmployeeModalList(e.target.value);
+      try {
+        elements.btnLoginSubmit.disabled = true;
+        elements.btnLoginSubmit.textContent = 'Verifying Credentials...';
+
+        let targetIdentifier = identifier;
+        if (!targetIdentifier && selectVal) {
+          const emp = AppState.employeesList.find(x => x.id === parseInt(selectVal));
+          if (emp) targetIdentifier = emp.staff_id;
+        }
+
+        const res = await ApiClient.employeeLogin(targetIdentifier, pin);
+        AppState.currentEmployee = res.employee;
+        localStorage.setItem(STORAGE_AUTH_KEY, JSON.stringify(res.employee));
+        
+        showToast(`Welcome, ${res.employee.name}!`, 'success');
+        await showPersonalDashboard();
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        elements.btnLoginSubmit.disabled = false;
+        elements.btnLoginSubmit.innerHTML = `
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Sign In to My Dashboard
+        `;
+      }
+    });
+  }
+
+  // 3. Employee Logout
+  if (elements.btnEmployeeLogout) {
+    elements.btnEmployeeLogout.addEventListener('click', () => {
+      localStorage.removeItem(STORAGE_AUTH_KEY);
+      if (elements.loginPin) elements.loginPin.value = '';
+      showLoginGate();
+      showToast('You have securely signed out of your portal.', 'info');
     });
   }
 }
 
 function getInitials(name) {
   return (name || '?').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-}
-
-function renderEmployeeModalList(filter = '') {
-  const filtered = filter
-    ? AppState.employeesList.filter(e =>
-        e.name.toLowerCase().includes(filter.toLowerCase()) ||
-        e.department.toLowerCase().includes(filter.toLowerCase())
-      )
-    : AppState.employeesList;
-
-  if (filtered.length === 0) {
-    elements.employeeSelectList.innerHTML =
-      `<div style="text-align:center;color:var(--t3);padding:1.5rem 1rem;font-size:.84rem;">No employees match.</div>`;
-    return;
-  }
-
-  elements.employeeSelectList.innerHTML = filtered.map(emp => {
-    const isActive = AppState.currentEmployee && AppState.currentEmployee.id === emp.id;
-    return `
-    <div class="emp-opt${isActive ? ' active' : ''}" data-id="${emp.id}" role="option" aria-selected="${isActive}" tabindex="0">
-      <div class="emp-av">${getInitials(emp.name)}</div>
-      <div>
-        <div class="emp-name">${emp.name}</div>
-        <div class="emp-meta">${emp.department} &bull; ${emp.staff_id}</div>
-      </div>
-      <span class="emp-arrow">${isActive ? '✓' : '→'}</span>
-    </div>`;
-  }).join('');
-
-  elements.employeeSelectList.querySelectorAll('.emp-opt').forEach(card => {
-    const activate = async () => {
-      const id = parseInt(card.getAttribute('data-id'));
-      AppState.currentEmployee = AppState.employeesList.find(e => e.id === id);
-      localStorage.setItem('clockify_active_emp_id', id);
-      renderEmployeeProfile();
-      elements.modalSwitch.classList.remove('open');
-      await refreshShiftData();
-      showToast(`Switched to ${AppState.currentEmployee.name}`, 'warning');
-    };
-    card.addEventListener('click', activate);
-    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') activate(); });
-  });
 }
 
 // Toast Notifications

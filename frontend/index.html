@@ -36,22 +36,62 @@
   <!-- MAIN PORTAL -->
   <main class="container" role="main">
 
-    <!-- Employee Bar -->
-    <div class="employee-bar">
-      <div class="employee-info">
-        <div class="avatar" id="employeeAvatar">--</div>
-        <div class="employee-text">
-          <h3 id="employeeName">Loading Profile…</h3>
-          <p id="employeeDept">Department &bull; Staff ID</p>
-        </div>
+    <!-- 1. PERSONALIZED EMPLOYEE LOGIN GATE (Visible when not authenticated) -->
+    <div class="auth-gate-wrap" id="employeeLoginGate" style="display: none;">
+      <div class="auth-gate-card">
+        <span class="auth-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Staff Identity Access
+        </span>
+        <h1 class="auth-title">Employee Portal</h1>
+        <p class="auth-sub">Sign in to your personalized attendance portal. Multiple user switching is disabled for security.</p>
+
+        <form class="auth-form" id="employeeLoginForm">
+          <div class="auth-field">
+            <label class="auth-label" for="loginEmployeeSelect">Select Profile</label>
+            <select class="auth-select" id="loginEmployeeSelect" aria-label="Select staff profile">
+              <option value="">— Choose your name from roster —</option>
+            </select>
+          </div>
+
+          <div class="auth-field">
+            <label class="auth-label" for="loginIdentifier">Or Enter Staff ID / Email</label>
+            <input type="text" class="auth-input" id="loginIdentifier" placeholder="e.g. EMP001 or name@clockify.local" autocomplete="username">
+          </div>
+
+          <div class="auth-field">
+            <label class="auth-label" for="loginPin">4-Digit Security PIN</label>
+            <input type="password" class="auth-input" id="loginPin" placeholder="Default: 1234" maxlength="8" required autocomplete="current-password">
+          </div>
+
+          <button type="submit" class="auth-btn" id="btnLoginSubmit">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            Sign In to My Dashboard
+          </button>
+        </form>
+        <p class="auth-note">🔒 Each employee has a dedicated personalized dashboard. Switching between users is restricted.</p>
       </div>
-      <button class="btn-switch" id="btnSwitchEmployee" type="button" aria-haspopup="dialog">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/>
-        </svg>
-        Switch Staff
-      </button>
     </div>
+
+    <!-- 2. PERSONALIZED EMPLOYEE DASHBOARD (Visible when authenticated) -->
+    <div id="employeeDashboard" style="display: none; width: 100%; flex-direction: column; gap: inherit;">
+
+      <!-- Employee Bar -->
+      <div class="employee-bar">
+        <div class="employee-info">
+          <div class="avatar" id="employeeAvatar">--</div>
+          <div class="employee-text">
+            <h3 id="employeeName">Loading Profile…</h3>
+            <p id="employeeDept">Department &bull; Staff ID</p>
+          </div>
+        </div>
+        <button class="btn-ghost btn-sm" id="btnEmployeeLogout" type="button" title="Sign out of this device">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Sign Out
+        </button>
+      </div>
 
     <!-- Clock Hero -->
     <section class="card card-glow clock-card" aria-label="Current time">
@@ -121,28 +161,10 @@
       <div class="history-list" id="historyList" role="list"></div>
     </section>
 
-  </main>
-
-  <!-- Employee Switcher Modal -->
-  <div class="modal-overlay" id="modalSwitch" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="modal-box">
-      <div class="modal-hd">
-        <h3 id="modalTitle">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-          </svg>
-          Select Staff Profile
-        </h3>
-        <button class="modal-x" id="modalClose" type="button" aria-label="Close">&times;</button>
-      </div>
-      <div class="modal-search-wrap">
-        <input type="search" class="modal-search" id="modalSearchInput" placeholder="Search employees…" autocomplete="off" aria-label="Search employees">
-      </div>
-      <div class="modal-list" id="employeeSelectList" role="listbox" aria-label="Employee list"></div>
     </div>
-  </div>
+    <!-- /#employeeDashboard -->
+
+  </main>
 
   <!-- Toast -->
   <div class="toast-container" id="toastContainer" role="status" aria-live="polite" aria-atomic="false"></div>

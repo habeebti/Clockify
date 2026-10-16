@@ -47,3 +47,8 @@ class AdminLoginRequest(BaseModel):
     username: str = Field(..., description="Admin username, staff ID or email (e.g. techAlhaji)")
     pin: str = Field(..., description="Security PIN / password (default 1234)")
 
+# Employee Authentication
+class EmployeeLoginRequest(BaseModel):
+    identifier: str = Field(..., description="Employee Staff ID, email, or full name")
+    pin: str = Field(..., description="4-digit security PIN (default 1234)")
+

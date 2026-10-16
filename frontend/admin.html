@@ -25,6 +25,17 @@
       <span class="brand-tag">Admin</span>
     </a>
     <nav class="nav-actions">
+      <div id="adminUserBadge" class="admin-badge-pill" style="display:none;">
+        <span class="admin-badge-dot"></span>
+        <span id="adminUsernameDisplay">techAlhaji</span>
+      </div>
+      <button type="button" class="btn-ghost" id="btnAdminLogout" style="display:none; padding: 0.38rem 0.75rem; font-size: 0.78rem;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+        Sign Out
+      </button>
       <a href="/" class="nav-link" id="navEmployeeLink">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
@@ -35,8 +46,53 @@
     </nav>
   </header>
 
-  <!-- ADMIN MAIN -->
-  <main class="admin-wrap" role="main">
+  <!-- EXCLUSIVE ADMIN LOGIN GATE -->
+  <section id="adminLoginGate" class="auth-gate-wrap" aria-label="Exclusive Admin Login">
+    <div class="auth-gate-card">
+      <div class="auth-security-badge">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        RESTRICTED CONSOLE · AUTHORIZED LEAD TECH ONLY
+      </div>
+      <div class="auth-gate-hd">
+        <div class="auth-avatar-shield">🛡️</div>
+        <h2 class="auth-gate-title">Admin Access Gate</h2>
+        <p class="auth-gate-sub">Exclusive administrative access for workforce monitoring, geofence parameter control, and live multi-device attendance records.</p>
+      </div>
+
+      <form id="adminLoginForm" class="auth-gate-form" onsubmit="return false;" novalidate>
+        <div class="f-group">
+          <label class="f-label" for="adminUsername">Admin Username / Staff ID</label>
+          <input type="text" id="adminUsername" class="f-input" placeholder="e.g. techAlhaji or EMP009" required autocomplete="username" autofocus>
+        </div>
+
+        <div class="f-group">
+          <label class="f-label" for="adminPin">Admin Security PIN</label>
+          <input type="password" id="adminPin" class="f-input" placeholder="Enter PIN (e.g. 1234)" maxlength="8" required autocomplete="current-password">
+        </div>
+
+        <div id="adminLoginError" class="auth-error-msg" style="display:none;"></div>
+
+        <button type="submit" id="btnAdminLoginSubmit" class="btn-primary auth-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Unlock Admin Console
+        </button>
+      </form>
+
+      <div class="auth-gate-footer">
+        <span>Are you an employee?</span>
+        <a href="/" class="auth-switch-link">Go to Employee Clock-In Portal &rarr;</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ADMIN MAIN (Protected) -->
+  <main class="admin-wrap" id="adminDashboardContent" role="main" style="display:none;">
 
     <!-- Page Header -->
     <div class="page-hd">
@@ -50,12 +106,22 @@
         <p class="page-hd-sub">Real-time workforce monitoring and geofence management</p>
       </div>
       <div class="page-hd-actions">
+        <div class="live-pill" id="liveSyncPill" title="Live multi-device polling active">
+          <span class="live-dot"></span>
+          <span>Live Sync</span>
+        </div>
         <div class="date-chip">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
           </svg>
           <span id="adminDateDisplay">—</span>
         </div>
+        <button type="button" class="btn-ghost" id="btnRefreshData" title="Refresh attendance records and KPIs">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          Refresh
+        </button>
         <button type="button" class="btn-primary" id="btnSeedDemo">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
@@ -212,6 +278,10 @@
         <div class="tbl-filters">
           <input type="date" id="filterDate" class="f-filter" aria-label="Filter by date" style="width:auto;">
           <input type="search" id="searchEmployee" class="f-filter" placeholder="Search staff or dept…" aria-label="Search" style="width:175px;">
+          <button type="button" class="btn-ghost" id="btnToggleAllDates" title="Toggle between today and all recorded dates">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span id="lblToggleAllDates">All Dates</span>
+          </button>
           <button type="button" class="btn-ghost" id="btnApplyFilters">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
             Filter

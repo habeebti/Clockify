@@ -6,7 +6,7 @@ Admin & Analytics endpoints.
 - Filtered attendance records (/api/admin/records)
 - CSV streaming & JSON exports (/api/admin/export/*)
 """
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from fastapi.responses import StreamingResponse
 from datetime import datetime, timedelta
 from typing import Optional
@@ -14,6 +14,7 @@ from typing import Optional
 from backend.config import get_now, get_today_str
 from backend.database import get_db
 from backend.models import GeofenceModel, AttendanceModel
+from backend.routers.auth import require_admin
 from backend.schemas import GeofenceUpdate
 from backend.services.reports import (
     generate_daily_report,
@@ -48,7 +49,7 @@ def get_geofence():
     return GeofenceModel.to_dict(row)
 
 
-@router.put("/geofence")
+@router.put("/geofence", dependencies=[Depends(require_admin)])
 def update_geofence(payload: GeofenceUpdate):
     """
     Update the active workplace coordinates, radius and shift start time.
@@ -119,7 +120,7 @@ def update_geofence(payload: GeofenceUpdate):
 # Analytics
 # ---------------------------------------------------------------------------
 
-@router.get("/metrics")
+@router.get("/metrics", dependencies=[Depends(require_admin)])
 def get_admin_metrics(
     date: Optional[str] = Query(None, description="Single day (YYYY-MM-DD). Defaults to today."),
     start_date: Optional[str] = Query(None, description="Range start (YYYY-MM-DD, inclusive)."),
@@ -147,7 +148,7 @@ def get_admin_metrics(
         raise HTTPException(status_code=422, detail=str(exc))
 
 
-@router.get("/records")
+@router.get("/records", dependencies=[Depends(require_admin)])
 def get_attendance_records(
     date: Optional[str] = Query(None, description="Filter by exact date (YYYY-MM-DD)."),
     start_date: Optional[str] = Query(None, description="Range start (YYYY-MM-DD, inclusive)."),
@@ -218,7 +219,7 @@ def _export_filename(ext: str, day=None, start=None, end=None) -> str:
     return f"attendance_report_{label}.{ext}"
 
 
-@router.get("/export/csv")
+@router.get("/export/csv", dependencies=[Depends(require_admin)])
 def download_attendance_csv(
     date: Optional[str] = Query(None, description="Filter by exact date (YYYY-MM-DD)."),
     start_date: Optional[str] = Query(None, description="Range start (YYYY-MM-DD, inclusive)."),
@@ -249,7 +250,7 @@ def download_attendance_csv(
     )
 
 
-@router.get("/export/json")
+@router.get("/export/json", dependencies=[Depends(require_admin)])
 def download_attendance_json(
     date: Optional[str] = Query(None, description="Filter by exact date (YYYY-MM-DD)."),
     start_date: Optional[str] = Query(None, description="Range start (YYYY-MM-DD, inclusive)."),
@@ -278,42 +279,57 @@ def download_attendance_json(
 # Demo data
 # ---------------------------------------------------------------------------
 
-@router.post("/seed-demo-data")
+@router.post("/seed-demo-data", dependencies=[Depends(require_admin)])
 def seed_demo_data():
     """Populates realistic sample attendance records across team members for demonstration."""
     conn = get_db()
     cursor = conn.cursor()
 
-    # Get sample employees
-    cursor.execute("SELECT id FROM employees LIMIT 6")
+    cursor.execute("SELECT id, name FROM employees ORDER BY id ASC")
     employees = cursor.fetchall()
+    if not employees:
+        conn.close()
+        raise HTTPException(status_code=400, detail="No employees found to seed demo records for.")
 
     today_str = get_today_str()
     yesterday_str = (get_now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
-    cursor.execute("SELECT latitude, longitude FROM geofence_settings LIMIT 1")
+    cursor.execute("SELECT latitude, longitude FROM geofence_settings ORDER BY id DESC LIMIT 1")
     geo = cursor.fetchone()
     lat = geo["latitude"] if geo else 6.5244
     lon = geo["longitude"] if geo else 3.3792
 
-    demo_records = [
-        (employees[0][0], today_str, "08:42:15", lat + 0.0001, lon + 0.0001, 14.5, "17:02:10", lat, lon, 18.2, "CLOCKED_OUT", 0, "On time"),
-        (employees[1][0], today_str, "08:55:00", lat, lon, 8.3, None, None, None, None, "CLOCKED_IN", 0, "Present"),
-        (employees[2][0], today_str, "09:18:22", lat + 0.0003, lon - 0.0002, 38.6, None, None, None, None, "CLOCKED_IN", 1, "Late arrival (Traffic)"),
-        (employees[3][0], yesterday_str, "08:30:10", lat, lon, 12.0, "17:15:00", lat, lon, 15.0, "CLOCKED_OUT", 0, "Completed"),
-        (employees[4][0], yesterday_str, "09:05:44", lat, lon, 22.1, "16:55:12", lat, lon, 25.4, "CLOCKED_OUT", 1, "Late arrival"),
+    # Remove today's existing records to prevent duplication on multiple seed clicks
+    cursor.execute("DELETE FROM attendance_records WHERE date IN (?, ?)", (today_str, yesterday_str))
+
+    sample_configs = [
+        ("08:35:12", lat + 0.0001, lon + 0.0001, 12.4, "17:02:10", lat, lon, 18.2, "CLOCKED_OUT", 0, "On time (Verified)"),
+        ("08:48:00", lat, lon, 8.3, None, None, None, None, "CLOCKED_IN", 0, "Active on-site shift"),
+        ("08:52:19", lat - 0.0001, lon + 0.0002, 24.1, None, None, None, None, "CLOCKED_IN", 0, "On time (Office GPS)"),
+        ("09:14:40", lat + 0.0003, lon - 0.0002, 38.6, None, None, None, None, "CLOCKED_IN", 1, "Late arrival (Traffic on Ikorodu Rd)"),
+        ("08:29:10", lat, lon, 11.0, "17:15:00", lat, lon, 15.0, "CLOCKED_OUT", 0, "Completed shift"),
+        ("09:08:44", lat, lon, 22.1, "16:55:12", lat, lon, 25.4, "CLOCKED_OUT", 1, "Late arrival (Verified)"),
+        ("08:40:05", lat + 0.0002, lon, 19.5, None, None, None, None, "CLOCKED_IN", 0, "Active shift"),
+        ("08:58:30", lat, lon - 0.0001, 14.8, None, None, None, None, "CLOCKED_IN", 0, "On time"),
     ]
 
-    for rec in demo_records:
+    for i, emp in enumerate(employees):
+        emp_id = emp["id"]
+        cfg = sample_configs[i % len(sample_configs)]
+        # alternate between today and yesterday for diverse testing
+        record_date = today_str if i % 2 == 0 or i < 4 else yesterday_str
         cursor.execute("""
             INSERT INTO attendance_records (
                 employee_id, date, clock_in_time, clock_in_lat, clock_in_lon,
                 clock_in_distance, clock_out_time, clock_out_lat, clock_out_lon,
                 clock_out_distance, status, is_late, notes
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, rec)
+        """, (
+            emp_id, record_date, cfg[0], cfg[1], cfg[2],
+            cfg[3], cfg[4], cfg[5], cfg[6], cfg[7], cfg[8], cfg[9], cfg[10]
+        ))
 
     conn.commit()
     conn.close()
 
-    return {"status": "success", "message": "Demo attendance data seeded successfully"}
+    return {"status": "success", "message": f"Sample attendance records seeded across {len(employees)} employees!"}

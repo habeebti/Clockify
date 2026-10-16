@@ -128,6 +128,10 @@ const GeoService = {
   }
 };
 
-// ES module export for app.js to import directly
-export const { getUserLocation, getCurrentPosition, watchPosition, watchDistanceToOffice, calculateDistance } = GeoService;
-export default GeoService;
+// Expose globally on window for browser scripts, and support module exports if bundled
+if (typeof window !== "undefined") {
+  window.GeoService = GeoService;
+}
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = GeoService;
+}
